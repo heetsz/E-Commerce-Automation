@@ -130,7 +130,7 @@ pipeline {
             steps {
                 script {
                     echo '>>> Application Logs:'
-                    bat 'docker-compose logs app | findstr "INFO\|ERROR\|SUCCESS" || docker-compose logs app'
+                    bat 'docker-compose logs app'
                 }
             }
         }
