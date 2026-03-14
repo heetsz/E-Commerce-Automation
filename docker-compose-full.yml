@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  jenkins:
+    image: jenkins/jenkins:latest-jdk21
+    container_name: jenkins
+    ports:
+      - "8085:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker
+    environment:
+      JAVA_OPTS: "-Dhudson.tasks.MailSender.ALLOW_UNTRUSTED_CERTIFICATE=true"
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    container_name: ecommerce_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: ecommerce_auth
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot123"]
+      timeout: 20s
+      retries: 10
+
+  app:
+    image: ecommerce-app:latest
+    container_name: ecommerce_app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ecommerce_auth?createDatabaseIfNotExist=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root123
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      DB_USERNAME: root
+      DB_PASSWORD: root123
+      GOOGLE_CLIENT_ID: 545017610024-nu233osdqu24d05jojn290q5kr1td3q8.apps.googleusercontent.com
+      GOOGLE_CLIENT_SECRET: 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
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  jenkins_home:
