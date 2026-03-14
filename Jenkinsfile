@@ -1,6 +1,6 @@
 // E-Commerce Automation - CI/CD Pipeline
 // Triggers on GitHub Push Events
-// Jenkins runs on port 8085
+// Jenkins runs on port 8085 (Linux/Unix Agent)
 
 pipeline {
     agent any
@@ -48,7 +48,7 @@ pipeline {
                 script {
                     echo '>>> Building Spring Boot Application...'
                     dir('Backend') {
-                        bat 'mvn clean package -DskipTests'
+                        sh 'mvn clean package -DskipTests'
                     }
                 }
             }
@@ -59,7 +59,7 @@ pipeline {
                 script {
                     echo '>>> Running Unit Tests...'
                     dir('Backend') {
-                        bat 'mvn test'
+                        sh 'mvn test'
                     }
                 }
             }
@@ -70,8 +70,8 @@ pipeline {
                 script {
                     echo ">>> Building Docker Image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                     dir('Backend') {
-                        bat "docker build -t ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} ."
-                        bat "docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_LATEST}"
+                        sh "docker build -t ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} ."
+                        sh "docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_LATEST}"
                     }
                 }
             }
@@ -85,12 +85,12 @@ pipeline {
                 script {
                     echo ">>> Pushing to Docker Hub..."
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        bat '''
-                            docker login -u %DOCKER_USER% -p %DOCKER_PASS%
-                            docker tag %DOCKER_IMAGE_NAME%:%DOCKER_IMAGE_LATEST% %DOCKER_USER%/%DOCKER_IMAGE_NAME%:%DOCKER_IMAGE_TAG%
-                            docker tag %DOCKER_IMAGE_NAME%:%DOCKER_IMAGE_LATEST% %DOCKER_USER%/%DOCKER_IMAGE_NAME%:%DOCKER_IMAGE_LATEST%
-                            docker push %DOCKER_USER%/%DOCKER_IMAGE_NAME%:%DOCKER_IMAGE_TAG%
-                            docker push %DOCKER_USER%/%DOCKER_IMAGE_NAME%:%DOCKER_IMAGE_LATEST%
+                        sh '''
+                            echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                            docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_LATEST} ${DOCKER_USER}/${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
+                            docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_LATEST} ${DOCKER_USER}/${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_LATEST}
+                            docker push ${DOCKER_USER}/${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
+                            docker push ${DOCKER_USER}/${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_LATEST}
                             docker logout
                         '''
                     }
@@ -105,7 +105,7 @@ pipeline {
             steps {
                 script {
                     echo '>>> Deploying with Docker Compose...'
-                    bat '''
+                    sh '''
                         docker-compose down
                         docker-compose up -d
                     '''
@@ -117,10 +117,10 @@ pipeline {
             steps {
                 script {
                     echo '>>> Waiting for app to start...'
-                    bat '''
-                        timeout /t 15 /nobreak
-                        echo Checking app health...
-                        curl -f http://localhost:8080 && echo ✅ App is running! || (echo ❌ App health check failed! && exit /b 1)
+                    sh '''
+                        sleep 15
+                        echo "Checking app health..."
+                        curl -f http://localhost:8080 && echo "✅ App is running!" || (echo "❌ App health check failed!" && exit 1)
                     '''
                 }
             }
@@ -130,7 +130,7 @@ pipeline {
             steps {
                 script {
                     echo '>>> Application Logs:'
-                    bat 'docker-compose logs app'
+                    sh 'docker-compose logs app | tail -30'
                 }
             }
         }
@@ -145,7 +145,7 @@ pipeline {
                 echo '╚════════════════════════════════════════╝'
                 echo ''
                 echo 'App available at: http://localhost:8080'
-                echo 'Build #: ${BUILD_NUMBER}'
+                echo "Build #: ${BUILD_NUMBER}"
             }
         }
         failure {
@@ -155,7 +155,7 @@ pipeline {
                 echo '║  ❌ DEPLOYMENT FAILED ❌               ║'
                 echo '╚════════════════════════════════════════╝'
                 echo ''
-                bat 'docker-compose logs app'
+                sh 'docker-compose logs app | tail -50'
             }
         }
         always {
