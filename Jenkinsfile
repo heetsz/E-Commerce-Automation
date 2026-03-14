@@ -106,8 +106,8 @@ pipeline {
                 script {
                     echo '>>> Deploying with Docker Compose...'
                     sh '''
-                        docker-compose down
-                        docker-compose up -d
+                        docker compose down
+                        docker compose up -d
                     '''
                 }
             }
@@ -130,7 +130,7 @@ pipeline {
             steps {
                 script {
                     echo '>>> Application Logs:'
-                    sh 'docker-compose logs app | tail -30'
+                    sh 'docker compose logs app | tail -30'
                 }
             }
         }
@@ -155,7 +155,7 @@ pipeline {
                 echo '║  ❌ DEPLOYMENT FAILED ❌               ║'
                 echo '╚════════════════════════════════════════╝'
                 echo ''
-                sh 'docker-compose logs app | tail -50'
+                sh 'docker compose logs app | tail -50 || echo "Logs not available"'
             }
         }
         always {
