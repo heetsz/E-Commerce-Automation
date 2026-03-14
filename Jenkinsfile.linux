@@ -1,0 +1,122 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_REGISTRY = "docker.io"
+        DOCKER_IMAGE_NAME = "ecommerce-app"
+        DOCKER_IMAGE_TAG = "${BUILD_NUMBER}"
+        DOCKER_IMAGE_LATEST = "latest"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    echo '========== Checking out code =========='
+                }
+                checkout scm
+            }
+        }
+
+        stage('Build') {
+            steps {
+                script {
+                    echo '========== Building Spring Boot Application =========='
+                    dir('Backend') {
+                        sh 'mvn clean package -DskipTests'
+                    }
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                script {
+                    echo '========== Running Tests =========='
+                    dir('Backend') {
+                        sh 'mvn test'
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    echo '========== Building Docker Image =========='
+                    dir('Backend') {
+                        sh "docker build -t ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} ."
+                        sh "docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_LATEST}"
+                    }
+                }
+            }
+        }
+
+        stage('Push to Registry') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    echo '========== Pushing Docker Image to Registry =========='
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh '''
+                            echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                            docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_LATEST} ${DOCKER_USER}/${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
+                            docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_LATEST} ${DOCKER_USER}/${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_LATEST}
+                            docker push ${DOCKER_USER}/${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
+                            docker push ${DOCKER_USER}/${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_LATEST}
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Deploy with Docker Compose') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    echo '========== Deploying with Docker Compose =========='
+                    sh '''
+                        docker-compose down
+                        docker-compose up -d
+                    '''
+                }
+            }
+        }
+
+        stage('Health Check') {
+            steps {
+                script {
+                    echo '========== Health Check =========='
+                    sh '''
+                        sleep 10
+                        curl -f http://localhost:8080 || exit 1
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                echo '========== Pipeline Finished =========='
+                sh 'docker-compose logs app | tail -50'
+            }
+        }
+        success {
+            script {
+                echo '✅ Pipeline executed successfully!'
+            }
+        }
+        failure {
+            script {
+                echo '❌ Pipeline failed!'
+                sh 'docker-compose logs app'
+            }
+        }
+    }
+}
